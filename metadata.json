@@ -1,0 +1,6 @@
+{
+  "name": "AI Assistant",
+  "description": "A modern web application featuring an AI assistant with chat history and real-time generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
