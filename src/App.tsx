@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Menu, X, MessageSquare, Mic } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { ChatInterface } from './components/ChatInterface';
@@ -16,7 +16,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [mode, setMode] = useState<'chat'|'voice'>('chat');
-  const [lastTrace, setLastTrace] = useState<any>(null);
+  const [lastTrace, setLastTrace] = useState<{ intent?: string; traces?: any[]; latencyMs?: number } | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(()=>{ localStorage.setItem('ai_chat_sessions', JSON.stringify(sessions)); },[sessions]);
   useEffect(()=>{ if(sessions.length>0 && !activeSessionId) setActiveSessionId(sessions[0].id); },[sessions, activeSessionId]);
@@ -44,7 +45,8 @@ export default function App() {
     const a=document.createElement('a'); a.href=dataStr; a.download=`chat_export_${activeSession.id}.txt`; document.body.appendChild(a); a.click(); a.remove();
   };
 
-  const sendViaOrchestrator = async (text: string, m: 'chat'|'voice' = mode) => {
+  // 2. Implement API Call — wired to POST http://localhost:3000/api/orchestrator/run
+  const sendViaOrchestrator = useCallback(async (text: string, m: 'chat'|'voice' = mode) => {
     let currentSessionId = activeSessionId;
     if(!currentSessionId){
       const ns: ChatSession={ id: generateId(), title: text.slice(0,30), messages:[], updatedAt: Date.now()};
@@ -54,28 +56,53 @@ export default function App() {
     setSessions(p=>p.map(s=>s.id===currentSessionId? {...s, title: s.messages.length===0? text.slice(0,30):s.title, messages:[...s.messages,userMsg], updatedAt:Date.now()}:s));
     setIsLoading(true);
     setLastTrace(null);
+
+    // barge-in: abort previous fetch + cancel TTS
+    try { abortRef.current?.abort(); } catch {}
+    try { window.speechSynthesis?.cancel(); } catch {}
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try{
       const history = activeSession?.messages || [];
       const res = await fetch('/api/orchestrator/run',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ prompt:text, history, mode:m })
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ prompt:text, history, mode:m }),
+        signal: controller.signal
       });
-      if(!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      if(!res.ok){
+        const errBody = await res.text().catch(()=> '');
+        throw new Error(`Backend ${res.status}: ${errBody.slice(0,200) || res.statusText}`);
+      }
+      const data: { text:string; intent:string; traces:any[]; latencyMs:number } = await res.json();
+
       const aiMsg: Message={ id: generateId(), role:'ai', text:data.text, timestamp: Date.now()};
       setSessions(p=>p.map(s=>s.id===currentSessionId? {...s,messages:[...s.messages,aiMsg],updatedAt:Date.now()}:s));
-      setLastTrace({ traces:data.traces, intent:data.intent, latencyMs:data.latencyMs });
-      // trigger TTS for voice mode
+
+      // 3. UI State Wiring — traces/latency mapped without re-render loops (set once, stable object)
+      setLastTrace({ intent: data.intent, traces: data.traces, latencyMs: data.latencyMs });
+
+      // 4. Audio Playback — dispatch to VoiceAssistant's hook
       if(m==='voice' && data.text){
-        window.dispatchEvent(new CustomEvent('app:speak',{detail:data.text}));
+        window.dispatchEvent(new CustomEvent('app:speak',{detail: data.text}));
       }
       return data.text as string;
     }catch(e:any){
-      const err:Message={ id: generateId(), role:'ai', text:'Error: '+(e.message||'request failed'), timestamp:Date.now()};
+      if(e?.name === 'AbortError') return; // barge-in aborted, ignore
+      // try/catch ensures no crash if backend unreachable — show error bubble
+      const msg = e?.message?.includes('Failed to fetch') ? 'Backend unreachable (is http://localhost:3000 running?)' : e.message || 'Request failed';
+      const err:Message={ id: generateId(), role:'ai', text:`⚠️ ${msg}`, timestamp:Date.now()};
       setSessions(p=>p.map(s=>s.id===currentSessionId? {...s,messages:[...s.messages,err]}:s));
       throw e;
-    }finally{ setIsLoading(false); }
-  };
+    }finally{
+      if(abortRef.current === controller) abortRef.current = null;
+      setIsLoading(false);
+    }
+  }, [activeSession, activeSessionId, mode]);
+
+  // cleanup abort on unmount
+  useEffect(()=>()=>{ try{ abortRef.current?.abort(); }catch{}; try{ window.speechSynthesis?.cancel(); }catch{} },[]);
 
   return (
     <div className="flex flex-col h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
