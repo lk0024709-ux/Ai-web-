@@ -68,6 +68,32 @@ export default function App() {
     }));
   };
 
+  const handleExportJSON = () => {
+    if (!activeSession) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(activeSession, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `chat_export_${activeSession.id}.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const handleExportTXT = () => {
+    if (!activeSession) return;
+    const textContent = activeSession.messages.map(m => 
+      `[${m.role === 'ai' ? 'AI Assistant' : 'You'}] - ${new Date(m.timestamp).toLocaleString()}\n${m.text}\n`
+    ).join('\n----------------------------------------\n\n');
+    const header = `Chat Session: ${activeSession.title}\nExported: ${new Date().toLocaleString()}\n\n========================================\n\n`;
+    const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(header + textContent);
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `chat_export_${activeSession.id}.txt`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
   const handleSendMessage = async (text: string) => {
     let currentSessionId = activeSessionId;
     
@@ -206,6 +232,8 @@ export default function App() {
             onSendMessage={handleSendMessage}
             isLoading={isLoading}
             onClearChat={handleClearChat}
+            onExportJSON={handleExportJSON}
+            onExportTXT={handleExportTXT}
           />
         </main>
       </div>

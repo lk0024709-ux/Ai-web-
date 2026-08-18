@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Trash2 } from 'lucide-react';
+import { Send, Loader2, Trash2, Download } from 'lucide-react';
 import { Message } from '../types';
 import { ChatMessage } from './ChatMessage';
 
@@ -8,13 +8,17 @@ interface ChatInterfaceProps {
   onSendMessage: (text: string) => void;
   isLoading: boolean;
   onClearChat: () => void;
+  onExportJSON: () => void;
+  onExportTXT: () => void;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
   messages, 
   onSendMessage, 
   isLoading,
-  onClearChat
+  onClearChat,
+  onExportJSON,
+  onExportTXT
 }) => {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -92,13 +96,29 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-white via-white to-transparent dark:from-slate-950 dark:via-slate-950 pt-6 pb-4 px-4 sm:px-6 md:px-8">
         <div className="max-w-4xl mx-auto relative">
           {messages.length > 0 && (
-            <div className="absolute -top-10 right-0">
+            <div className="absolute -top-10 right-0 flex items-center gap-2">
+              <button 
+                onClick={onExportJSON}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full shadow-sm border border-slate-200 dark:border-slate-800 transition-colors"
+                title="Export as JSON"
+              >
+                <Download size={12} />
+                JSON
+              </button>
+              <button 
+                onClick={onExportTXT}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full shadow-sm border border-slate-200 dark:border-slate-800 transition-colors"
+                title="Export as Text"
+              >
+                <Download size={12} />
+                TXT
+              </button>
               <button 
                 onClick={onClearChat}
-                className="flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-red-500 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full shadow-sm border border-slate-200 dark:border-slate-800 transition-colors"
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-red-500 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full shadow-sm border border-slate-200 dark:border-slate-800 transition-colors"
               >
                 <Trash2 size={12} />
-                Clear Chat
+                Clear
               </button>
             </div>
           )}
